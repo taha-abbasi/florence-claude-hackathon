@@ -2,7 +2,7 @@
 // Each tool returns a string Florence narrates from (status-prefixed).
 
 import type { CoverageResult, PlanDisplay } from "@/lib/types";
-import { normalizePlan, sortByRealPrice } from "@/lib/calculator/pricing";
+import { buildPlanList } from "@/lib/calculator/pricing";
 import { formatCurrency } from "@/lib/format";
 import type { SceneEvent } from "./scene";
 
@@ -186,7 +186,7 @@ export function createFlorenceClientTools(store: FlorenceStore, dispatch: Dispat
       });
       const raw: Record<string, unknown>[] = planRes?.plans ?? [];
       store.totalPlans = Number(planRes?.total ?? raw.length);
-      const all = sortByRealPrice(raw.map((r) => normalizePlan(r, store.aptc)));
+      const all = buildPlanList(planRes, store.aptc);
       store.allPlans = all;
       steps[2].done = true;
       dispatch({ t: "searchProgress", steps: steps.map((s) => ({ ...s })) });

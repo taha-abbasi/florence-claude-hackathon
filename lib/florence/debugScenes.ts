@@ -23,11 +23,18 @@ function plan(
     aptc: 1041,
     realPrice: real,
     deductible: ded,
+    deductibleFamily: ded * 2,
     baseDeductible: baseDed,
+    baseDeductibleFamily: baseDed * 2,
     moop: 3000,
+    moopFamily: 6000,
     baseMoop: 9500,
+    baseMoopFamily: 19000,
     copays,
     rating: 4,
+    ratings: { clinical: 3, enrollee: 0, efficiency: 5 },
+    allBenefits: [],
+    documents: {},
   };
 }
 

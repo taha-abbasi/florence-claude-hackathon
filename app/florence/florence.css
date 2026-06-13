@@ -19,7 +19,7 @@
   font: 600 11px/1 var(--af-font-sans);
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--af-gold-2);
+  color: var(--af-eyebrow);
 }
 .af-l2-flo__close {
   background: none;
@@ -57,11 +57,13 @@
   gap: 12px;
 }
 .af-l2-flo__ctrl {
-  border: 1px solid var(--af-line);
+  border: 1.5px solid var(--af-ink);
   background: var(--af-paper);
+  color: var(--af-ink);
   border-radius: 4px;
   padding: 10px 16px;
   font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
   min-height: 44px;
 }
@@ -238,13 +240,13 @@
 }
 .flo-card__head em {
   font-style: italic;
-  color: var(--af-gold-2);
+  color: var(--af-eyebrow);
 }
 .flo-card__eyebrow {
   font: 600 11px/1 var(--af-font-sans);
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--af-gold-2);
+  color: var(--af-eyebrow);
   display: flex;
   align-items: center;
   gap: 10px;
@@ -253,7 +255,7 @@
   content: "";
   height: 1px;
   width: 22px;
-  background: var(--af-gold-2);
+  background: var(--af-eyebrow);
 }
 .flo-card__issuer {
   font-size: 12px;
@@ -408,7 +410,7 @@
   font-size: 10.5px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--af-gold-2);
+  color: var(--af-eyebrow);
 }
 
 /* email confirm + done */

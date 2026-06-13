@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { PlanDisplay } from "@/lib/types";
 import { formatCurrency, formatCurrencyWhole, savingsPct } from "@/lib/format";
 
@@ -12,18 +13,38 @@ function Stars({ n }: { n: number }) {
   );
 }
 
+function BeforeAfter({
+  label,
+  value,
+  base,
+}: {
+  label: string;
+  value: number;
+  base: number;
+}) {
+  const showStrike = base > value;
+  return (
+    <div>
+      <small>{label}</small>
+      {showStrike && <span className="was">{formatCurrencyWhole(base)}</span>}
+      <b>{formatCurrencyWhole(value)}</b>
+    </div>
+  );
+}
+
 export default function PlanCard({
   plan,
   variant = "micro",
+  href,
 }: {
   plan: PlanDisplay;
   variant?: "default" | "compact" | "micro";
+  href?: string;
 }) {
   const pct = savingsPct(plan.realPrice, plan.premium);
-  const showWasDed = plan.baseDeductible > plan.deductible;
-  const showWasMoop = plan.baseMoop > plan.moop;
-  return (
-    <div className="pc">
+
+  const body = (
+    <>
       <div className="pc__issuer">{plan.issuer}</div>
       <div className="pc__name">{plan.name}</div>
       <div className="pc__pills">
@@ -43,20 +64,8 @@ export default function PlanCard({
       </div>
 
       <div className="pc__dm">
-        <div>
-          <small>Deductible</small>
-          <b>{formatCurrencyWhole(plan.deductible)}</b>
-          {showWasDed && (
-            <span className="was">{formatCurrencyWhole(plan.baseDeductible)}</span>
-          )}
-        </div>
-        <div>
-          <small>Max out-of-pocket</small>
-          <b>{formatCurrencyWhole(plan.moop)}</b>
-          {showWasMoop && (
-            <span className="was">{formatCurrencyWhole(plan.baseMoop)}</span>
-          )}
-        </div>
+        <BeforeAfter label="Deductible" value={plan.deductible} base={plan.baseDeductible} />
+        <BeforeAfter label="Max out-of-pocket" value={plan.moop} base={plan.baseMoop} />
       </div>
 
       {variant !== "micro" && (
@@ -83,6 +92,21 @@ export default function PlanCard({
           </div>
         </div>
       )}
-    </div>
+
+      {href && (
+        <span className="pc__detail">
+          View plan details →
+        </span>
+      )}
+    </>
   );
+
+  if (href) {
+    return (
+      <Link className="pc pc--link" href={href}>
+        {body}
+      </Link>
+    );
+  }
+  return <div className="pc">{body}</div>;
 }

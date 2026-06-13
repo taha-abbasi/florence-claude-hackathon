@@ -89,7 +89,7 @@ export default function Home() {
                 Signature Benchmark Silver
               </div>
             </div>
-            <span className="af-pill" style={{ background: "var(--af-glow)", color: "var(--af-gold-2)" }}>
+            <span className="af-pill" style={{ background: "var(--af-glow)", color: "#5e4a1e", fontWeight: 600 }}>
               $0 deductible
             </span>
           </div>

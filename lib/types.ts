@@ -40,10 +40,14 @@ export interface PlanDisplay {
   premium: number; // sticker
   aptc: number; // applied to this plan
   realPrice: number; // max(0, premium - aptc)
-  deductible: number; // post-CSR (active)
-  baseDeductible: number; // pre-CSR
-  moop: number; // post-CSR
-  baseMoop: number; // pre-CSR
+  deductible: number; // post-CSR (active), individual
+  deductibleFamily: number | null; // post-CSR, family total
+  baseDeductible: number; // pre-CSR, individual
+  baseDeductibleFamily: number | null;
+  moop: number; // post-CSR, individual
+  moopFamily: number | null;
+  baseMoop: number; // pre-CSR, individual
+  baseMoopFamily: number | null;
   copays: {
     primaryCare: string;
     specialist: string;
@@ -52,7 +56,10 @@ export interface PlanDisplay {
     emergency: string;
     therapy: string;
   };
-  rating: number; // 0-5
+  rating: number; // 0-5 (global)
+  ratings: { clinical: number; enrollee: number; efficiency: number };
+  allBenefits: { name: string; cost: string }[];
+  documents: { sbc?: string; formulary?: string; network?: string; brochure?: string };
   raw?: unknown;
 }
 

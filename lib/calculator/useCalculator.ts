@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import type { County, Household, PlanDisplay, Place } from "@/lib/types";
-import { normalizePlan, sortByRealPrice } from "./pricing";
+import { buildPlanList } from "./pricing";
 
 export type CalcPhase =
   | "form"
@@ -112,8 +112,7 @@ export function useCalculator(initial?: Partial<CalcForm>) {
       const rawPlans: Record<string, unknown>[] = planRes?.plans ?? [];
       setTotalPlans(Number(planRes?.total ?? rawPlans.length));
 
-      const normalized = rawPlans.map((p) => normalizePlan(p, thisAptc));
-      const sorted = sortByRealPrice(normalized).slice(0, 3);
+      const sorted = buildPlanList(planRes, thisAptc).slice(0, 3);
       setPlans(sorted);
       setPhase("results");
     },
@@ -181,9 +180,9 @@ export function useCalculator(initial?: Partial<CalcForm>) {
     setShowCountyPicker(false);
   }, []);
 
-  const browseAllPlansUrl = useMemo(() => {
+  const planParams = useMemo(() => {
     const c = selectedCounty;
-    const p = new URLSearchParams({
+    return new URLSearchParams({
       zip: form.zipCode,
       income: String(form.income),
       household_size: String(form.people.length),
@@ -192,9 +191,13 @@ export function useCalculator(initial?: Partial<CalcForm>) {
       county_fips: c?.fips ?? "",
       aptc: String(Math.round(aptc)),
       csr,
-    });
-    return `/plans?${p.toString()}`;
+    }).toString();
   }, [form, selectedCounty, aptc, csr]);
+
+  const planHref = useCallback(
+    (planId: string) => `/plans/${planId}?${planParams}`,
+    [planParams],
+  );
 
   return {
     form,
@@ -212,7 +215,7 @@ export function useCalculator(initial?: Partial<CalcForm>) {
     isNonExpansionBump,
     stateMarketplace,
     unsupportedInfo,
-    browseAllPlansUrl,
+    planHref,
     handleSubmit,
     handleAlternateCountyPick,
     resetForm,

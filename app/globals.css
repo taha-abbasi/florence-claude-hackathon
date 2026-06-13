@@ -17,7 +17,8 @@
   --af-stone: #6a6f7c;
   /* brand gold */
   --af-gold: #c9a967;
-  --af-gold-2: #b8903f;
+  --af-gold-2: #b8903f; /* large-text accent ONLY (fails AA at small sizes) */
+  --af-eyebrow: #8b7445; /* AA-safe darker gold for small eyebrow/link text on cream */
   /* semantic */
   --af-green: #1f6b49;
   --af-green-d: #184f36;
@@ -76,13 +77,13 @@ body {
   font: 600 11px/1 var(--af-font-sans);
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: var(--af-gold-2);
+  color: var(--af-eyebrow);
 }
 .af-eyebrow::before {
   content: "";
   width: 32px;
   height: 1px;
-  background: var(--af-gold-2);
+  background: var(--af-eyebrow);
 }
 
 .af-h1 {
@@ -144,10 +145,16 @@ body {
 .af-btn--ghost {
   background: transparent;
   color: var(--af-ink);
-  border-color: var(--af-line);
+  border: 1.5px solid var(--af-ink);
 }
 .af-btn--ghost:hover {
-  border-color: var(--af-gold-2);
+  background: var(--af-ink);
+  color: var(--af-paper);
+}
+.af-btn--primary:focus-visible,
+.af-btn--ghost:focus-visible {
+  outline: 2px solid var(--af-gold-2);
+  outline-offset: 3px;
 }
 
 .af-wordmark {

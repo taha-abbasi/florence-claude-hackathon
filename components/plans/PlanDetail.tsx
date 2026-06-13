@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import "@/components/home/home.css";
 import type { PlanDisplay } from "@/lib/types";
-import { normalizePlan } from "@/lib/calculator/pricing";
+import { buildPlanList } from "@/lib/calculator/pricing";
 import { formatCurrency, formatCurrencyWhole, savingsPct } from "@/lib/format";
 
 async function postJson(path: string, body: unknown) {
@@ -25,6 +25,7 @@ export default function PlanDetail({
 }) {
   const [plan, setPlan] = useState<PlanDisplay | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showAll, setShowAll] = useState(false);
 
   const zip = sp.zip ?? "84094";
   const state = sp.state ?? "UT";
@@ -56,10 +57,9 @@ export default function PlanDetail({
         ...(csrApplies ? { filters: { metal_levels: ["Silver"] } } : {}),
         limit: 200,
       });
-      const raw: Record<string, unknown>[] = planRes?.plans ?? [];
-      const found = raw.find((p) => String(p.id) === planId);
+      const found = buildPlanList(planRes, aptc).find((p) => p.id === planId);
       if (alive) {
-        setPlan(found ? normalizePlan(found, aptc) : null);
+        setPlan(found ?? null);
         setLoading(false);
       }
     })();
@@ -154,6 +154,23 @@ export default function PlanDetail({
         </div>
       </div>
 
+      {/* CSR explainer */}
+      {plan.baseDeductible > plan.deductible && (
+        <div
+          className="af-card"
+          style={{ padding: 22, marginTop: 24, borderLeft: "4px solid var(--af-gold-2)" }}
+        >
+          <span className="af-eyebrow">Why your costs are this low</span>
+          <p style={{ color: "var(--af-body)", margin: "12px 0 0", fontSize: 15 }}>
+            You qualify for <em style={{ color: "var(--af-gold-2)", fontStyle: "italic" }}>extra savings</em> on Silver plans.
+            Without them, this plan would carry a {formatCurrencyWhole(plan.baseDeductible)}{" "}
+            deductible and a {formatCurrencyWhole(plan.baseMoop)} out-of-pocket max. Your
+            cost-sharing is reduced to {formatCurrencyWhole(plan.deductible)} and{" "}
+            {formatCurrencyWhole(plan.moop)}.
+          </p>
+        </div>
+      )}
+
       {/* subsidy waterfall */}
       {plan.aptc > 0 && (
         <section style={{ marginTop: 48 }}>
@@ -223,6 +240,122 @@ export default function PlanDetail({
               <div style={{ fontFamily: "var(--af-font-label)", fontSize: 22, marginTop: 4 }}>
                 {v}
               </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* quality rating */}
+      {(plan.rating > 0 ||
+        plan.ratings.clinical > 0 ||
+        plan.ratings.enrollee > 0 ||
+        plan.ratings.efficiency > 0) && (
+        <section style={{ marginTop: 48 }}>
+          <span className="af-eyebrow">Quality rating</span>
+          <h2 className="af-h3" style={{ margin: "14px 0 24px" }}>
+            How members rate <em>this plan.</em>
+          </h2>
+          <div className="af-card" style={{ padding: 24 }}>
+            <div style={{ fontFamily: "var(--af-font-label)", fontSize: 28, color: "var(--af-gold-2)" }}>
+              {plan.rating > 0 ? `${"★".repeat(Math.round(plan.rating))} ${plan.rating}/5` : "Not yet rated"}
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+                gap: 16,
+                marginTop: 16,
+              }}
+            >
+              {[
+                ["Getting the right care", plan.ratings.clinical],
+                ["Member care experience", plan.ratings.enrollee],
+                ["Plan service experience", plan.ratings.efficiency],
+              ].map(([l, v]) => (
+                <div key={l as string}>
+                  <div style={{ fontSize: 13, color: "var(--af-body)" }}>{l}</div>
+                  <div style={{ fontFamily: "var(--af-font-label)", fontSize: 18, color: (v as number) > 0 ? "var(--af-ink)" : "var(--af-stone)" }}>
+                    {(v as number) > 0 ? `${"★".repeat(v as number)} ${v}/5` : "Not rated"}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* all benefits */}
+      {plan.allBenefits.length > 0 && (
+        <section style={{ marginTop: 48 }}>
+          <span className="af-eyebrow">Full coverage</span>
+          <h2 className="af-h3" style={{ margin: "14px 0 20px" }}>
+            Everything <em>this plan covers.</em>
+          </h2>
+          <div className="af-card" style={{ padding: 8 }}>
+            {(showAll ? plan.allBenefits : plan.allBenefits.slice(0, 8)).map((b) => (
+              <div
+                key={b.name}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 16,
+                  padding: "11px 16px",
+                  borderBottom: "1px solid var(--af-line)",
+                  fontSize: 14,
+                }}
+              >
+                <span style={{ color: "var(--af-body)" }}>{b.name}</span>
+                <span style={{ fontFamily: "var(--af-font-label)", flexShrink: 0 }}>{b.cost}</span>
+              </div>
+            ))}
+          </div>
+          {plan.allBenefits.length > 8 && (
+            <button
+              className="af-btn af-btn--ghost"
+              style={{ marginTop: 12 }}
+              onClick={() => setShowAll((v) => !v)}
+            >
+              {showAll ? "Show fewer" : `View all ${plan.allBenefits.length} benefits`}
+            </button>
+          )}
+        </section>
+      )}
+
+      {/* documents */}
+      <section style={{ marginTop: 48 }}>
+        <span className="af-eyebrow">Plan documents</span>
+        <h2 className="af-h3" style={{ margin: "14px 0 20px" }}>
+          The official paperwork.
+        </h2>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+            gap: 12,
+          }}
+        >
+          {[
+            ["Summary of benefits", plan.documents.sbc],
+            ["Drug formulary", plan.documents.formulary],
+            ["Provider directory", plan.documents.network],
+            ["Plan brochure", plan.documents.brochure],
+          ].map(([label, url]) => (
+            <div key={label as string} className="af-card" style={{ padding: 16 }}>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>{label}</div>
+              {url ? (
+                <a
+                  href={url as string}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: "var(--af-gold-2)", fontSize: 13, textDecoration: "underline" }}
+                >
+                  Open document →
+                </a>
+              ) : (
+                <span style={{ color: "var(--af-stone)", fontSize: 12.5 }}>
+                  Not provided for this plan.
+                </span>
+              )}
             </div>
           ))}
         </div>

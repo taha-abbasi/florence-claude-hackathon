@@ -1,8 +1,16 @@
-// The ONLY pricing rules the client applies. The API returns the hard parts
-// (APTC, CSR, Medicaid adjustment); the client only applies max(0, premium-aptc)
-// and normalizes the raw plan shape into PlanDisplay.
+// Plan normalization — matches the REAL Florence Tools /plans shape and mirrors
+// the canonical extractCopay / extractCostShare logic from @askflorence/shared.
+//
+// Real plan shape (key fields):
+//   issuer: { name }          type: "HMO"          premium / premium_w_credit
+//   deductibles[]: { amount, type, family_cost: "Individual"|"Family Per Person"|"Family", network_tier }
+//   moops[]:       { amount, type, family_cost, network_tier }
+//   benefits[]:    { name, covered, cost_sharings: [{ copay_amount, coinsurance_rate, copay_options, network_tier }] }
+//   quality_rating: { global_rating, clinical_quality_management_rating, enrollee_experience_rating, plan_efficiency_rating }
+// The pre-CSR (sticker) deductible/MOOP live in the parallel `base_plans[]`, keyed by id.
 
 import type { PlanDisplay } from "@/lib/types";
+import { formatCurrency } from "@/lib/format";
 
 export function realPriceOf(premium: number, aptc: number): number {
   return Math.max(0, premium - aptc);
@@ -13,78 +21,149 @@ function num(v: unknown, fallback = 0): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
-function firstAmount(arr: unknown): number {
-  if (!Array.isArray(arr)) return 0;
-  for (const item of arr) {
-    if (item && typeof item === "object") {
-      const amt = (item as Record<string, unknown>).amount;
-      if (amt != null) return num(amt);
-    }
-    if (typeof item === "number") return item;
-  }
-  return 0;
+interface CostSharing {
+  copay_amount?: number;
+  coinsurance_rate?: number;
+  copay_options?: string;
+  network_tier?: string;
+}
+interface Benefit {
+  name: string;
+  covered?: boolean;
+  cost_sharings?: CostSharing[];
+}
+interface AmountItem {
+  amount: number;
+  type?: string;
+  family_cost?: string;
+  network_tier?: string;
 }
 
-function copayStr(copays: Record<string, unknown> | undefined, keys: string[]): string {
-  if (!copays) return "-";
-  for (const k of keys) {
-    const v = copays[k];
-    if (v == null) continue;
-    if (typeof v === "number") return v === 0 ? "$0" : `$${v}`;
-    if (typeof v === "string" && v.trim()) return v;
-    if (typeof v === "object") {
-      const amt = (v as Record<string, unknown>).amount ?? (v as Record<string, unknown>).copay;
-      if (amt != null) {
-        const n = num(amt);
-        return n === 0 ? "$0" : `$${n}`;
-      }
-    }
-  }
-  return "-";
+const BENEFIT_NAMES = {
+  primaryCare: "primary care visit to treat an injury or illness",
+  specialist: "specialist visit",
+  urgentCare: "urgent care centers or facilities",
+  genericDrugs: "generic drugs",
+  emergency: "emergency room services",
+  therapy: "mental/behavioral health outpatient services",
+};
+
+const DED_TYPE = "medical ehb deductible";
+const MOOP_TYPE = "maximum out of pocket for medical and drug ehb benefits (total)";
+
+// Format an In-Network cost-share string for one benefit (matches canonical).
+function extractCopay(benefits: Benefit[] | undefined, benefitName: string): string {
+  if (!benefits) return "-";
+  const b = benefits.find((x) => x.name?.toLowerCase() === benefitName);
+  if (!b?.cost_sharings?.length) return "-";
+  const inNet = b.cost_sharings.find((cs) => cs.network_tier === "In-Network") ?? b.cost_sharings[0];
+  const copay = num(inNet.copay_amount);
+  const coins = num(inNet.coinsurance_rate);
+  const afterDed = (inNet.copay_options ?? "").toLowerCase().includes("after deductible");
+  if (copay > 0) return formatCurrency(copay) + (afterDed ? " after ded." : "");
+  if (coins > 0) return `${Math.round(coins * 100)}% coins.`;
+  return "$0";
 }
 
-// Map the raw /plans plan object → PlanDisplay, applying the given aptc.
-export function normalizePlan(raw: Record<string, unknown>, aptc: number): PlanDisplay {
+// Pull Individual + Family-group amounts from a deductibles/moops array.
+function extractCostShare(
+  items: AmountItem[] | undefined,
+  typeMatch: string,
+): { individual: number; family: number | null } {
+  if (!items) return { individual: 0, family: null };
+  const c = items.filter(
+    (i) => (i.type ?? "").toLowerCase() === typeMatch && i.network_tier === "In-Network",
+  );
+  const indiv = c.find((i) => i.family_cost === "Individual");
+  const perPerson = c.find((i) => i.family_cost === "Family Per Person");
+  const group = c.find((i) => i.family_cost === "Family");
+  return {
+    individual: num(indiv?.amount ?? perPerson?.amount ?? group?.amount ?? 0),
+    family: group ? num(group.amount) : null,
+  };
+}
+
+function allCoveredBenefits(benefits: Benefit[] | undefined): { name: string; cost: string }[] {
+  if (!benefits) return [];
+  return benefits
+    .filter((b) => b.covered)
+    .map((b) => {
+      const inNet = b.cost_sharings?.find((cs) => cs.network_tier === "In-Network") ?? b.cost_sharings?.[0];
+      const copay = num(inNet?.copay_amount);
+      const coins = num(inNet?.coinsurance_rate);
+      const cost = copay > 0 ? formatCurrency(copay) : coins > 0 ? `${Math.round(coins * 100)}%` : "$0";
+      return { name: b.name, cost };
+    });
+}
+
+type Raw = Record<string, unknown>;
+
+// Normalize one raw plan, applying the given aptc and an optional base (pre-CSR) plan.
+export function normalizePlan(raw: Raw, aptc: number, basePlan?: Raw | null): PlanDisplay {
   const premium = num(raw.premium);
-  const deductibles = raw.deductibles;
-  const moops = raw.moops;
-  const copays = (raw.copays ?? {}) as Record<string, unknown>;
+  const benefits = raw.benefits as Benefit[] | undefined;
+  const issuerObj = raw.issuer as { name?: string } | string | undefined;
+  const issuer =
+    typeof issuerObj === "string" ? issuerObj : (issuerObj?.name ?? "Carrier");
   const quality = (raw.quality_rating ?? {}) as Record<string, unknown>;
 
-  const activeDeductible = num(
-    (raw as Record<string, unknown>).deductible ?? firstAmount(deductibles),
-  );
-  const activeMoop = num((raw as Record<string, unknown>).moop ?? firstAmount(moops));
+  const ded = extractCostShare(raw.deductibles as AmountItem[], DED_TYPE);
+  const moop = extractCostShare(raw.moops as AmountItem[], MOOP_TYPE);
+  const baseDed = extractCostShare(basePlan?.deductibles as AmountItem[], DED_TYPE);
+  const baseMoop = extractCostShare(basePlan?.moops as AmountItem[], MOOP_TYPE);
+
+  const urls = (raw.urls ?? {}) as Record<string, string>;
 
   return {
     id: String(raw.id ?? ""),
-    issuer: String(raw.issuer ?? raw.issuer_name ?? "Carrier"),
+    issuer,
     name: String(raw.name ?? "Plan"),
-    metalLevel: String(raw.metal_level ?? raw.metal ?? "Silver"),
-    planType: String(raw.plan_type ?? "HMO"),
+    metalLevel: String(raw.metal_level ?? "Silver"),
+    planType: String(raw.type ?? raw.plan_type ?? "HMO"),
     premium,
     aptc,
     realPrice: realPriceOf(premium, aptc),
-    deductible: activeDeductible,
-    baseDeductible: num((raw as Record<string, unknown>).base_deductible) || activeDeductible,
-    moop: activeMoop,
-    baseMoop: num((raw as Record<string, unknown>).base_moop) || activeMoop,
+    deductible: ded.individual,
+    deductibleFamily: ded.family,
+    baseDeductible: baseDed.individual || ded.individual,
+    baseDeductibleFamily: baseDed.family,
+    moop: moop.individual,
+    moopFamily: moop.family,
+    baseMoop: baseMoop.individual || moop.individual,
+    baseMoopFamily: baseMoop.family,
     copays: {
-      primaryCare: copayStr(copays, ["primary_care", "primaryCare", "pcp"]),
-      specialist: copayStr(copays, ["specialist"]),
-      urgentCare: copayStr(copays, ["urgent_care", "urgentCare", "urgent"]),
-      genericDrugs: copayStr(copays, ["generic_drugs", "genericDrugs", "generic"]),
-      emergency: copayStr(copays, ["emergency", "emergency_room", "er"]),
-      therapy: copayStr(copays, [
-        "mental_health_outpatient",
-        "behavioral_health",
-        "therapy",
-        "mental_behavioral_health_outpatient",
-      ]),
+      primaryCare: extractCopay(benefits, BENEFIT_NAMES.primaryCare),
+      specialist: extractCopay(benefits, BENEFIT_NAMES.specialist),
+      urgentCare: extractCopay(benefits, BENEFIT_NAMES.urgentCare),
+      genericDrugs: extractCopay(benefits, BENEFIT_NAMES.genericDrugs),
+      emergency: extractCopay(benefits, BENEFIT_NAMES.emergency),
+      therapy: extractCopay(benefits, BENEFIT_NAMES.therapy),
     },
-    rating: num(quality.global_rating ?? quality.globalRating ?? raw.rating ?? 0),
+    rating: num(quality.global_rating),
+    ratings: {
+      clinical: num(quality.clinical_quality_management_rating),
+      enrollee: num(quality.enrollee_experience_rating),
+      efficiency: num(quality.plan_efficiency_rating),
+    },
+    allBenefits: allCoveredBenefits(benefits),
+    documents: {
+      sbc: urls.sbc || urls.summary_of_benefits,
+      formulary: urls.formulary,
+      network: urls.provider_directory || urls.network,
+      brochure: urls.brochure || urls.plan_brochure,
+    },
     raw,
   };
+}
+
+// Build a normalized, real-price-sorted list from a /plans response.
+export function buildPlanList(apiResponse: Record<string, unknown>, aptc: number): PlanDisplay[] {
+  const raw = (apiResponse?.plans ?? []) as Raw[];
+  const baseList = (apiResponse?.base_plans ?? []) as Raw[];
+  const baseById = new Map<string, Raw>();
+  for (const b of baseList) baseById.set(String(b.id), b);
+  const normalized = raw.map((r) => normalizePlan(r, aptc, baseById.get(String(r.id))));
+  return sortByRealPrice(normalized);
 }
 
 export function sortByRealPrice(plans: PlanDisplay[]): PlanDisplay[] {

@@ -155,9 +155,10 @@ export default function Calculator() {
 
             <div className="tk__grid">
               {c.plans.map((p) => (
-                <PlanCard key={p.id} plan={p} variant="micro" />
+                <PlanCard key={p.id} plan={p} variant="micro" href={c.planHref(p.id)} />
               ))}
             </div>
+            <p className="tk__tap-hint">Tap a plan to see full benefits and documents.</p>
           </div>
         )}
 
@@ -213,12 +214,18 @@ export default function Calculator() {
           </div>
         )}
 
-        {c.phase === "results" && scene === "plans" && (
+        {c.phase === "results" && scene === "plans" && c.bestPlan && (
           <div className="tk__cta">
-            <Link className="af-btn af-btn--primary" href="/florence">
-              Talk to Florence about these →
+            <Link className="af-btn af-btn--primary" href={c.planHref(c.bestPlan.id)}>
+              View plan details →
             </Link>
-            <small>Check which plans cover your doctors and prescriptions.</small>
+            <small>
+              Or{" "}
+              <Link href="/florence" className="tk__cta-link">
+                talk to Florence by voice
+              </Link>{" "}
+              to check your doctors and prescriptions.
+            </small>
           </div>
         )}
       </div>
