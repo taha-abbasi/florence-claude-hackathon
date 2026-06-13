@@ -156,6 +156,18 @@ body {
   outline: 2px solid var(--af-gold-2);
   outline-offset: 3px;
 }
+/* The .af-root a { color: inherit } reset (specificity 0,1,1) would otherwise
+   beat .af-btn--primary (0,1,0) and make button-LINKS render invisible text.
+   These higher-specificity rules restore button text color for anchor buttons. */
+.af-root a.af-btn--primary {
+  color: var(--af-white);
+}
+.af-root a.af-btn--ghost {
+  color: var(--af-ink);
+}
+.af-root a.af-btn--ghost:hover {
+  color: var(--af-paper);
+}
 
 .af-wordmark {
   font-family: var(--af-font-serif);
